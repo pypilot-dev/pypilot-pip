@@ -4,29 +4,31 @@ PyPilot — Deterministic Python environment doctor and dependency manager.
 
 from __future__ import annotations
 
-import subprocess
-import sys
-from typing import List, Optional
-
-from .engine import ensure_binary, get_cache_dir
-
 __version__ = "1.2.2"
 
+from .api import RunResult, arun, run  # noqa: E402
+from .engine import (  # noqa: E402
+    EngineDownloadError,
+    EngineError,
+    EngineInfo,
+    EngineNotFoundError,
+    EngineVerificationError,
+    ensure_binary,
+    get_cache_dir,
+    locate_engine,
+)
 
-def run(args: Optional[List[str]] = None, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
-    """
-    Run PyPilot programmatically.
-
-    Example:
-        import pypilot
-        res = pypilot.run(["doctor"])
-        print(res.stdout)
-    """
-    bin_path = ensure_binary()
-    cmd = [str(bin_path)]
-    if args:
-        cmd.extend(args)
-    return subprocess.run(cmd, capture_output=capture_output, text=True, check=False)
-
-
-__all__ = ["ensure_binary", "get_cache_dir", "run", "__version__"]
+__all__ = [
+    "EngineDownloadError",
+    "EngineError",
+    "EngineInfo",
+    "EngineNotFoundError",
+    "EngineVerificationError",
+    "RunResult",
+    "__version__",
+    "arun",
+    "ensure_binary",
+    "get_cache_dir",
+    "locate_engine",
+    "run",
+]
