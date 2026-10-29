@@ -13,6 +13,8 @@
 
 **PyPilot** is a deterministic Python environment doctor, dependency solver, and toolchain manager. Powered by a high-speed compiled **Rust engine**, PyPilot calculates dependency intersections directly from PyPI wheel metadata, resolves hardware and CUDA build compatibility, and sets up working virtual environments without external AI or API keys.
 
+📚 **Documentation:** <https://pypilot-dev.github.io/pypilot/> (the [Python package](https://pypilot-dev.github.io/pypilot/python/), its [API](https://pypilot-dev.github.io/pypilot/python/api), the [engine CLI](https://pypilot-dev.github.io/pypilot/engine/), [pixi](https://pypilot-dev.github.io/pypilot/pixi/) and the [configuration reference](https://pypilot-dev.github.io/pypilot/reference/configuration)).
+
 ---
 
 ## ⚡ High-Speed Native Rust Architecture
@@ -110,9 +112,10 @@ pypilot update-data
 ```
 
 ### 8. `pypilot migrate-conda`
-Translates legacy Anaconda / Miniconda `environment.yml` configuration files into a standard modern `pyproject.toml`.
+Translates legacy Anaconda / Miniconda `environment.yml` configuration files into a standard modern `pyproject.toml`. With `--to pixi`, previews a `pixi.toml` instead (`--write` writes it; see [pixi support](#-pixi-support)).
 ```bash
 pypilot migrate-conda
+pypilot migrate-conda --to pixi --write
 ```
 
 ### 9. `pypilot lsp`
@@ -157,6 +160,47 @@ From async code, `await pypilot.arun([...])` takes the same arguments and does n
 - Without `check=True` a failing command does not raise. Look at `.returncode`.
 - Engine problems raise `pypilot.EngineError` subclasses: `EngineNotFoundError` (offline and no engine), `EngineDownloadError`, `EngineVerificationError`.
 - The package ships `py.typed`, so type checkers see these signatures.
+
+---
+
+## 📦 pixi support
+
+[pixi](https://pixi.sh) installs packages from conda-forge and PyPI into a per-project environment, with a lock file. It helps where pip and uv stop:
+
+- **System libraries** (GDAL, PROJ, GEOS, libGL...): pip and uv cannot install them; conda-forge ships them next to the Python bindings.
+- **No wheel for your platform or Python**: conda-forge often has a prebuilt build, so no compiler is needed.
+- **The CUDA toolkit**: pip wheels carry only the CUDA runtime, not `nvcc`; conda-forge provides it per project.
+- **One manifest** for Python together with R, C++ or Rust, **one lock file** (`pixi.lock`) covering native dependencies on every listed OS, and **several environments** (for example `default` and `cuda`) in one project.
+
+**pixi projects.** A folder with a `pixi.toml`, or `[tool.pixi.workspace]` in `pyproject.toml`, is managed through pixi whatever `package_manager` says. PyPilot uses the environment in `.pixi/envs/<name>` (`default`, or `pixi_environment` / `--pixi-env <name>`), runs `pixi install` for setup and `pixi add --pypi` for installs, explains pixi's install errors, and never creates a `.venv`, runs uv or writes `pixi.lock`. `pypilot doctor` lists every environment and reports environments on different Pythons, a stale `pixi.lock` (a read-only check) and PyPI dependencies with no wheel for one of the manifest's platforms.
+
+**When PyPilot suggests pixi.** In a pip or uv project, PyPilot recognises problems pip and uv cannot solve (a dependency with no wheel whose build needs native libraries, a failed build missing a header such as `gdal.h`, CUDA sources without `nvcc`, a repository mixing Python with R, Rust or C++) and suggests pixi. It never converts anything on its own. With `numpy`, `requests` and `gdal` in `requirements.txt` on Windows:
+
+```text
+$ pypilot doctor
+...
+  [WARN ] GDAL 3.13.3 needs native libraries pip cannot install
+          GDAL 3.13.3 has no wheel for Windows x64, so pip and uv build it from source. [...] pixi installs gdal 3.13.3 from conda-forge with its native libraries (libgdal, proj, geos), built for win-64 and Python 3.15. Run `pypilot migrate-to-pixi` to set the project up with pixi.
+
+$ pypilot migrate-to-pixi
+Dry run: nothing was written.
+...
++[dependencies]
++python = "3.15.*"
++numpy = "*"
++requests = "*"
++gdal = "*"
+
+Would write ...\geo\pixi.toml: python 3.15.*, 3 conda-forge and 0 PyPI dependencies.
+
+Next: pypilot migrate-to-pixi --write
+```
+
+**Moving to pixi.** `pypilot migrate-to-pixi` previews a `pixi.toml`; `--write` writes it and `--write --install` also runs `pixi install`. `pypilot migrate-conda --to pixi` does the same from an `environment.yml`. A separate `pixi.toml` is written; `pyproject.toml`, `requirements.txt` and `environment.yml` are never edited, so pip and CI keep working. `pypilot install-pixi` installs pixi with its official installer, and `package_manager = "pixi"` makes `setup` write the `pixi.toml` itself.
+
+Guides: [pixi and PyPilot](https://pypilot-dev.github.io/pypilot/pixi/), [the advisory](https://pypilot-dev.github.io/pypilot/pixi/advisory), [migrating to pixi](https://pypilot-dev.github.io/pypilot/pixi/migrate).
+
+> Engine 1.2.2, the one `pypilot-cli` 1.2.2 runs, already detects pixi projects and works through `pixi install` and `pixi add --pypi`. The environment choice, doctor's pixi checks, the advisory, `migrate-to-pixi`, `migrate-conda --to pixi`, `install-pixi` and `package_manager = "pixi"` need a newer engine: coming in the next release.
 
 ---
 
