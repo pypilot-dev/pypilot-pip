@@ -10,13 +10,20 @@ import shutil
 import stat
 import subprocess
 import sys
+import sysconfig
 import tarfile
 import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import Set
 
 from .binary import BUNDLED_VERSION, DEFAULT_TAG, GITHUB_REPO, MIN_VERSION
+
+# Set while probing a candidate engine. A `pypilot` on PATH can be this very
+# wrapper (a console-script launcher), and probing it must not make it search
+# PATH again.
+_ENV_PROBING = "_PYPILOT_PROBING"
 
 
 def get_platform_slug() -> tuple[str, str]:
@@ -76,11 +83,14 @@ def parse_version(out: str) -> tuple[int, int, int] | None:
 
 
 def probe_binary(path: Path | str) -> tuple[int, int, int] | None:
+    env = dict(os.environ)
+    env[_ENV_PROBING] = "1"
     try:
         res = subprocess.run(
             [str(path), "--version"],
             capture_output=True,
             text=True,
+            env=env,
             # macOS scans a freshly downloaded binary on its first launch, which
             # can take several seconds. Timing out here made a good engine look
             # broken and triggered a needless re-download.
@@ -171,6 +181,24 @@ def install_binary(src: Path, dest: Path) -> None:
             tmp.unlink()
 
 
+def _own_launchers() -> Set[str]:
+    """Paths under which this wrapper itself may appear on PATH."""
+    found: Set[str] = set()
+    candidates = []
+    try:
+        candidates.append(Path(sysconfig.get_path("scripts")) / binary_name())
+    except (KeyError, TypeError):
+        pass
+    if sys.argv and sys.argv[0]:
+        candidates += [Path(sys.argv[0]), Path(sys.argv[0] + ".exe")]
+    for candidate in candidates:
+        try:
+            found.add(os.path.normcase(str(candidate.resolve())))
+        except OSError:
+            pass
+    return found
+
+
 def ensure_binary() -> Path:
     """
     Locates an existing binary on PATH or in cache, or downloads it from GitHub.
@@ -192,11 +220,12 @@ def ensure_binary() -> Path:
             return cargo_bin
 
     # 3. Check system PATH (making sure we don't recurse into ourselves)
-    system_path = shutil.which(bin_name)
+    system_path = None if os.environ.get(_ENV_PROBING) else shutil.which(bin_name)
     if system_path:
         p = Path(system_path).resolve()
-        # Avoid looping if python script itself is called pypilot.exe
-        if not str(p).lower().endswith((".py", ".pyw")):
+        # Avoid looping if python script itself is called pypilot.exe, or is
+        # this package's own console-script launcher.
+        if not str(p).lower().endswith((".py", ".pyw")) and os.path.normcase(str(p)) not in _own_launchers():
             ver = probe_binary(p)
             if ver and ver >= MIN_VERSION:
                 return p

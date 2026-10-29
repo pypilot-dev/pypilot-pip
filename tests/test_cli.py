@@ -110,3 +110,21 @@ def test_install_binary_replaces_instead_of_rewriting_in_place(tmp_path):
         assert os.access(dest, os.X_OK)
     # No temporary file is left behind.
     assert sorted(p.name for p in tmp_path.iterdir()) == ["new", "pypilot"]
+
+
+def test_probing_never_searches_path(tmp_path, monkeypatch):
+    # A `pypilot` on PATH may be this wrapper; probing it must not recurse.
+    from pypilot import engine
+
+    fake = tmp_path / engine.binary_name()
+    fake.write_bytes(b"x")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv(engine._ENV_PROBING, "1")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr(engine.Path, "home", lambda: tmp_path / "home")
+    probed = []
+    monkeypatch.setattr(engine, "probe_binary", lambda p: probed.append(p))
+    monkeypatch.setattr(engine, "download_binary", lambda: tmp_path / "downloaded")
+    assert engine.ensure_binary() == tmp_path / "downloaded"
+    assert probed == []
