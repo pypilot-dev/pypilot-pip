@@ -51,3 +51,6 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/pypilot"]
 
+
+[tool.pytest.ini_options]
+markers = ["network: downloads the real engine from GitHub"]
