@@ -132,7 +132,7 @@ print(f"Native engine located at: {bin_path}")
 ## ⚙️ Configuration
 
 PyPilot respects workspace settings in `.pypilot.toml` or your editor configuration:
-- `package_manager`: `"auto"` (default), `"uv"`, `"uv-pip"`, or `"pip"`.
+- `package_manager`: `"auto"` (default), `"uv"`, `"uv-pip"`, `"pip"`, or `"pixi"` (manage with pixi; a project without a pixi manifest gets a `pixi.toml` from setup). pixi projects are detected whatever this says.
 - `notifications`: `"all"`, `"problems-only"`, or `"off"`.
 
 ---
