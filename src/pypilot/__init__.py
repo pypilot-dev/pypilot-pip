@@ -1,5 +1,5 @@
 """
-PyPilot — Deterministic Python environment doctor and dependency manager.
+PyPilot: deterministic Python environment doctor and dependency manager.
 """
 
 from __future__ import annotations
