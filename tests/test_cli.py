@@ -1,9 +1,13 @@
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 import pypilot
-from pypilot.binary import ensure_binary, get_platform_slug
+from pypilot import cli
+from pypilot.binary import BUNDLED_VERSION, ensure_binary, get_platform_slug
+from pypilot.engine import EngineInfo
 
 
 def test_platform_slug():
@@ -23,6 +27,97 @@ def test_pypilot_version():
     res = pypilot.run(["--version"], capture_output=True)
     assert res.returncode == 0
     assert "pypilot" in res.stdout
+
+
+@pytest.mark.network
+def test_wrapper_version_end_to_end():
+    res = subprocess.run(
+        [sys.executable, "-m", "pypilot.cli", "--version"], capture_output=True, text=True, check=False
+    )
+    assert res.returncode == 0, res.stderr
+    # Editor extensions parse stdout as exactly `pypilot X.Y.Z`.
+    assert res.stdout.strip().startswith("pypilot ")
+    assert len(res.stdout.strip().splitlines()) == 1
+    assert f"pypilot-cli {pypilot.__version__}" in res.stderr
+
+
+class FakeRun:
+    def __init__(self, stdout: str = "", returncode: int = 0) -> None:
+        self.calls = []
+        self.stdout = stdout
+        self.returncode = returncode
+
+    def __call__(self, cmd, **kwargs):
+        self.calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, self.returncode, self.stdout, "")
+
+
+def _version(monkeypatch, capsys, source: str, engine_line: str):
+    info = EngineInfo(Path("/opt/engine/pypilot"), source, None)
+    monkeypatch.setattr(cli, "locate_engine", lambda: info)
+    fake = FakeRun(engine_line + "\n")
+    monkeypatch.setattr(cli.subprocess, "run", fake)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["--version"])
+    out, err = capsys.readouterr()
+    return exit_info.value.code, out, err, fake
+
+
+def test_version_prints_engine_line_on_stdout_and_wrapper_on_stderr(monkeypatch, capsys):
+    pinned = ".".join(map(str, BUNDLED_VERSION))
+    code, out, err, fake = _version(monkeypatch, capsys, "bundled", f"pypilot {pinned}")
+    assert code == 0
+    assert out == f"pypilot {pinned}\n"
+    assert f"pypilot-cli {pypilot.__version__} (engine: bundled," in err
+    assert "warning" not in err
+    assert fake.calls == [[str(Path("/opt/engine/pypilot")), "--version"]]
+
+
+def test_version_warns_about_an_older_engine_on_path(monkeypatch, capsys):
+    code, out, err, _ = _version(monkeypatch, capsys, "path", "pypilot 1.0.2")
+    assert code == 0 and out == "pypilot 1.0.2\n"
+    assert "older than" in err
+    assert "from PATH" in err
+
+
+def test_version_warns_about_a_different_cargo_engine(monkeypatch, capsys):
+    major, minor, patch = BUNDLED_VERSION
+    _, _, err, _ = _version(monkeypatch, capsys, "cargo", f"pypilot {major}.{minor}.{patch + 1}")
+    assert "older than" not in err
+    assert "from ~/.cargo/bin" in err
+
+
+def test_version_reports_a_missing_engine(monkeypatch, capsys):
+    def boom():
+        raise pypilot.EngineNotFoundError("PYPILOT_OFFLINE is set")
+
+    monkeypatch.setattr(cli, "locate_engine", boom)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["-V"])
+    out, err = capsys.readouterr()
+    assert exit_info.value.code == 1 and out == ""
+    assert "PYPILOT_OFFLINE is set" in err
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["doctor"],
+        ["completions", "bash"],
+        ["--version", "--json"],
+        ["doctor", "--version"],
+        ["version"],
+        [],
+    ],
+)
+def test_everything_else_passes_through(monkeypatch, args):
+    monkeypatch.setattr(cli, "ensure_binary", lambda: Path("engine"))
+    fake = FakeRun(returncode=7)
+    monkeypatch.setattr(cli.subprocess, "run", fake)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(args)
+    assert exit_info.value.code == 7
+    assert fake.calls == [["engine", *args]]
 
 
 def test_bundled_version_matches_default_tag():
