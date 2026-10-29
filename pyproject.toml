@@ -51,3 +51,11 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/pypilot"]
 
+# Bundles the engine when PYPILOT_ENGINE_ASSET is set (scripts/build_wheels.py);
+# otherwise the wheel stays pure Python.
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+
+[tool.pytest.ini_options]
+markers = ["network: downloads the real engine from GitHub"]

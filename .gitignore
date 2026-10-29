@@ -7,6 +7,8 @@ venv/
 dist/
 build/
 *.egg-info/
+# Engine packed into platform wheels by scripts/build_wheels.py
+src/pypilot/_engine/
 
 # Python bytecode & cache
 __pycache__/

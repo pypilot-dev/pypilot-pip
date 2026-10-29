@@ -8,32 +8,108 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  build-and-publish:
-    name: Build and publish to PyPI
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/pypilot-cli
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python
-        run: uv python install 3.12
+      - name: Test
+        run: uv run --python 3.12 python -m pytest -W error
 
-      - name: Install dependencies and test
+  build:
+    name: Build sdist and wheels
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Audit locked dependencies
         run: |
-          uv sync
-          uv run pytest
+          uv export --frozen --format requirements-txt --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
 
-      - name: Build package
-        run: uv build
+      # One Linux job builds every wheel: it only packs the pinned engine
+      # binaries (each checked against ENGINE_SHA256), and Linux keeps the
+      # executable bit the Linux and macOS wheels need.
+      - name: Build the sdist, the pure wheel and the platform wheels
+        run: uv run --python 3.12 python scripts/build_wheels.py
+
+      - name: Check the metadata
+        run: uv run --python 3.12 twine check --strict dist/*
+
+      - name: Run the manylinux wheel offline
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke/bin/python" dist/*-manylinux_*.whl
+          HOME="$(mktemp -d)" XDG_CACHE_HOME="$(mktemp -d)" PYPILOT_OFFLINE=1 HTTPS_PROXY=http://127.0.0.1:9 \
+            "$RUNNER_TEMP/smoke/bin/pypilot" --version 2>&1 | tee version.txt
+          grep -q "engine: bundled" version.txt
+
+      - name: Write the CycloneDX SBOM
+        run: |
+          mkdir sbom
+          uv export --frozen --no-dev --format cyclonedx1.5 --preview-features sbom-export -o "$RUNNER_TEMP/uv-sbom.json"
+          uv run --python 3.12 python scripts/sbom.py "$RUNNER_TEMP/uv-sbom.json" sbom/pypilot-cli.cdx.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pypilot-cli
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
+  github-release:
+    name: Attach wheels and SBOM to the GitHub release
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber artifacts/*
+          else
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --generate-notes artifacts/*
+          fi

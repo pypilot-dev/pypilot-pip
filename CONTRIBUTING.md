@@ -33,11 +33,16 @@ What is in this repo:
 
 | Path | What it is |
 |---|---|
-| `src/pypilot/binary.py` | Platform detection, the engine cache, version checks, download and extraction |
-| `src/pypilot/cli.py` | The `pypilot` console script: runs the engine and passes its exit code through |
-| `src/pypilot/__init__.py` | The package version and `pypilot.run()` for use from Python |
-| `tests/test_cli.py` | The tests |
-| `.github/workflows/` | `ci.yml` (test matrix) and `publish.yml` (PyPI release) |
+| `src/pypilot/binary.py` | The engine pin: `DEFAULT_TAG` and `ENGINE_SHA256`. The release workflow edits exactly these two. The old function names are re-exported from here |
+| `src/pypilot/engine.py` | Platform detection, the lookup order, the cache, download, SHA-256 verification, offline mode and proxy handling |
+| `src/pypilot/api.py` | `run()`, `arun()` and `RunResult` for use from Python |
+| `src/pypilot/cli.py` | The `pypilot` console script: answers `--version`, passes everything else to the engine along with its exit code |
+| `src/pypilot/__init__.py` | The package version and the public API |
+| `hatch_build.py` | Build hook that turns the wheel into a platform wheel bundling the engine |
+| `scripts/build_wheels.py` | Builds the sdist, the pure wheel and the four platform wheels |
+| `scripts/sbom.py` | Adds the bundled engine to uv's CycloneDX SBOM |
+| `tests/` | The tests |
+| `.github/workflows/` | `ci.yml` (tests, wheel build, `pip-audit`) and `publish.yml` (PyPI and GitHub release) |
 
 ## License
 
@@ -57,13 +62,15 @@ and include:
   prints `PyPilot: downloading native engine from <url> ...`, so include both lines.
 - Whether you are behind a proxy or offline, if the download failed.
 
-The engine is looked up in this order: the cache, then `~/.cargo/bin`, then `PATH`,
-then a fresh download. The cache is `%LOCALAPPDATA%\pypilot\bin\pypilot.exe` on
-Windows (falling back to `~\.cache\pypilot\bin` if `LOCALAPPDATA` is unset), and
-`$XDG_CACHE_HOME/pypilot/bin/pypilot` on Linux and macOS (falling back to
-`~/.cache/pypilot/bin/pypilot`). A cached engine older than the one this package
-ships is replaced. If you suspect a broken download, delete that file and run
-`pypilot --version` again.
+The engine is looked up in this order: `PYPILOT_ENGINE_VERSION` if set, then the
+engine bundled in a platform wheel, then the cache, then `~/.cargo/bin`, then `PATH`,
+then a fresh download (never with `PYPILOT_OFFLINE=1`). The cache holds one folder per
+engine release: `%LOCALAPPDATA%\pypilot\bin\<tag>\pypilot.exe` on Windows (falling
+back to `~\.cache\pypilot\bin` if `LOCALAPPDATA` is unset), and
+`$XDG_CACHE_HOME/pypilot/bin/<tag>/pypilot` on Linux and macOS (falling back to
+`~/.cache/pypilot/bin/<tag>/pypilot`). Downloads are checked against the pinned
+SHA-256 before they are extracted. If you suspect a broken download, delete that file
+and run `pypilot --version` again: its stderr line says which engine is in use.
 
 If the problem is about an environment (the output of `pypilot doctor`, a wrong
 Python or CUDA choice), report it in the
@@ -92,7 +99,9 @@ uv sync
 |---|---|
 | `uv run python -m pytest -W error` | Run the tests, with warnings as errors (what CI runs) |
 | `uv run --python 3.8 python -m pytest -W error` | The same on a specific Python version |
-| `uv build` | Build the sdist and wheel into `dist/` |
+| `uv run python -m pytest -W error -m "not network"` | Only the tests that need no network |
+| `uv build` | Build the sdist and the pure wheel into `dist/` |
+| `uv run python scripts/build_wheels.py` | Also build the platform wheels with the verified engine (the Linux and macOS ones only on Linux or macOS, which keep the executable bit) |
 | `uvx twine check dist/*` | Check the built package's metadata |
 
 CI runs the tests on Python 3.8 to 3.15 on Linux, and on 3.8 and 3.15 on Windows and
@@ -100,9 +109,10 @@ macOS, because archive handling differs between platforms. Warnings are errors s
 that a deprecation which a new Python release turns into a behaviour change fails
 there first.
 
-**The tests need network access.** Some of them call the real `ensure_binary()` and
-`pypilot --version`, so they download the real engine from GitHub on the first run
-(and cache it, see above).
+**Some tests need network access.** The ones marked `network` call the real
+`ensure_binary()` and `pypilot --version`, so they download the real engine from
+GitHub on the first run (and cache it, see above). Everything else (verification,
+offline mode, proxies, the API) runs against a local server or a stand-in engine.
 
 ## Code notes
 
@@ -126,7 +136,7 @@ there first.
 2. Fork the repo and create a branch from `master`.
 3. Keep the change focused. Match the style of the surrounding code, and explain *why*
    in comments rather than restating what the code does. Add or update a test in
-   `tests/test_cli.py` for a behaviour change.
+   `tests/` for a behaviour change.
 4. Make small, logical commits with clear messages (for example `fix(binary): ...`
    or `test: ...`). Use LF line endings.
 5. Run `uv run python -m pytest -W error`.
@@ -140,7 +150,9 @@ The maintainer reviews pull requests as time allows, so a short wait is normal.
 
 Releases are cut by the maintainer. Contributors do not need to bump versions or
 create tags. Pushing a tag `vX.Y.Z` runs the publish workflow, which tests, builds
-and publishes to PyPI through trusted publishing. `DEFAULT_TAG` in
-`src/pypilot/binary.py` names the engine release this package ships, so a new pip
-release is made only after that engine release exists. PyPI never allows a version
-number to be reused.
+the sdist, the pure wheel and the four platform wheels, publishes them to PyPI through
+trusted publishing, and attaches them with a CycloneDX SBOM to the GitHub release.
+`DEFAULT_TAG` and `ENGINE_SHA256` in `src/pypilot/binary.py` name the engine release
+this package ships and the SHA-256 of each of its archives, so a new pip release is
+made only after that engine release exists. PyPI never allows a version number to be
+reused.

@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: py${{ matrix.python }} (${{ matrix.os }})
@@ -31,3 +34,43 @@ jobs:
       # into a behaviour change (as 3.14 did for tarfile) fails here first.
       - name: Test
         run: uv run --python ${{ matrix.python }} python -m pytest -W error
+
+  wheels:
+    name: Build all wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build the sdist, the pure wheel and the platform wheels
+        run: uv run --python 3.12 python scripts/build_wheels.py
+
+      - name: Check the metadata
+        run: uv run --python 3.12 twine check --strict dist/*
+
+      # The bundled engine must run with no network at all.
+      - name: Run the manylinux wheel offline
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke/bin/python" dist/*-manylinux_*.whl
+          HOME="$(mktemp -d)" XDG_CACHE_HOME="$(mktemp -d)" PYPILOT_OFFLINE=1 HTTPS_PROXY=http://127.0.0.1:9 \
+            "$RUNNER_TEMP/smoke/bin/pypilot" --version 2>&1 | tee version.txt
+          grep -q "engine: bundled" version.txt
+
+  audit:
+    name: Audit locked dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # The package itself has no runtime dependencies; this covers the build
+      # and test tools in uv.lock.
+      - name: pip-audit
+        run: |
+          uv export --frozen --format requirements-txt --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"

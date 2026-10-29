@@ -1,0 +1,9 @@
+# Every change is reviewed by the maintainer.
+* @Abdullah-Masood-05
+
+# The engine pin (DEFAULT_TAG / ENGINE_SHA256) decides which native binary
+# every install downloads or bundles.
+/src/pypilot/binary.py @Abdullah-Masood-05
+/hatch_build.py @Abdullah-Masood-05
+/scripts/ @Abdullah-Masood-05
+/.github/workflows/ @Abdullah-Masood-05
