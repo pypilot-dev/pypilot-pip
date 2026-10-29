@@ -25,7 +25,7 @@ def clear_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Empty cache and home, nothing on PATH, no proxy.
+    """No bundled engine, empty cache and home, nothing on PATH, no proxy.
 
     Any env proxy variable stops urllib from reading the Windows registry, and
     `NO_PROXY=*` keeps the local test server off any system proxy.
@@ -43,6 +43,7 @@ def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         monkeypatch.delenv(name, raising=False)
     clear_proxies(monkeypatch)
     monkeypatch.setenv("NO_PROXY", "*")
+    monkeypatch.setattr(engine, "bundled_binary", lambda: None)
     return tmp_path
 
 

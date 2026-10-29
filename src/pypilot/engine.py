@@ -5,10 +5,11 @@ Lookup order (first match wins), see `locate_engine`:
 
 1. `PYPILOT_ENGINE_VERSION=vX.Y.Z` set: that release only, from the cache or
    downloaded and checked against the release's `SHA256SUMS`.
-2. A previous verified download of the pinned release in the cache.
-3. `~/.cargo/bin/pypilot` (a source build), if at least `MIN_VERSION`.
-4. A `pypilot` engine on PATH, if at least `MIN_VERSION`.
-5. Download the pinned release, verified against `ENGINE_SHA256`, unless
+2. The engine bundled in a platform wheel (`pypilot/_engine/pypilot[.exe]`).
+3. A previous verified download of the pinned release in the cache.
+4. `~/.cargo/bin/pypilot` (a source build), if at least `MIN_VERSION`.
+5. A `pypilot` engine on PATH, if at least `MIN_VERSION`.
+6. Download the pinned release, verified against `ENGINE_SHA256`, unless
    `PYPILOT_OFFLINE` is set.
 """
 
@@ -52,6 +53,7 @@ _ENV_PROBING = "_PYPILOT_PROBING"
 
 # Values of `EngineInfo.source`.
 SOURCE_OVERRIDE = "override"
+SOURCE_BUNDLED = "bundled"
 SOURCE_CACHE = "cache"
 SOURCE_CARGO = "cargo"
 SOURCE_PATH = "path"
@@ -236,6 +238,20 @@ def install_binary(src: Path, dest: Path) -> None:
             tmp.unlink()
 
 
+def bundled_binary() -> Optional[Path]:
+    """The engine shipped inside a platform wheel, if this is one."""
+    path = Path(__file__).resolve().parent / "_engine" / binary_name()
+    if not path.is_file():
+        return None
+    if sys.platform != "win32" and not os.access(path, os.X_OK):
+        # Wheels carry the executable bit, but a few installers drop it.
+        try:
+            path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        except OSError:
+            return None
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Downloading and verification
 
@@ -283,8 +299,8 @@ def _network_hint(url: str, reason: object, timeout: float) -> str:
         "Behind a proxy, set HTTPS_PROXY (and NO_PROXY for hosts that must "
         "bypass it); the system proxy settings are used when those are unset. "
         f"The timeout is {timeout:g}s ({ENV_DOWNLOAD_TIMEOUT}). To avoid the "
-        "download, build the engine with `cargo install --path helper` or put "
-        "a `pypilot` engine on PATH."
+        "download, install a platform wheel of pypilot-cli, build the engine "
+        "with `cargo install --path helper`, or put a `pypilot` engine on PATH."
     )
 
 
@@ -332,7 +348,8 @@ def parse_sha256sums(text: str) -> Dict[str, str]:
 def _offline_error(what: str) -> EngineNotFoundError:
     return EngineNotFoundError(
         f"{ENV_OFFLINE} is set, so PyPilot will not download {what}, and no "
-        "engine is available locally. Build it with `cargo install --path helper`, "
+        "engine is available locally. Install a platform wheel of pypilot-cli "
+        "(it bundles the engine), build it with `cargo install --path helper`, "
         f"put a `pypilot` engine on PATH, or unset {ENV_OFFLINE}."
     )
 
@@ -501,6 +518,11 @@ def locate_engine() -> EngineInfo:
             return EngineInfo(hit.path, SOURCE_OVERRIDE, hit.version)
         path = download_binary(override)
         return EngineInfo(path, SOURCE_OVERRIDE, probe_binary(path))
+
+    bundled = bundled_binary()
+    if bundled is not None:
+        # The build script only packs the pinned, verified asset.
+        return EngineInfo(bundled, SOURCE_BUNDLED, BUNDLED_VERSION)
 
     hit = _cached(DEFAULT_TAG)
     if hit is not None:

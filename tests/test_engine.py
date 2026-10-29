@@ -25,6 +25,7 @@ ASSETS = {
     "pypilot-linux-x64.tar.gz",
     "pypilot-windows-x64.zip",
 }
+REAL_BUNDLED_BINARY = engine.bundled_binary
 
 # Before 3.11, http.client leaves the socket of a refused proxy CONNECT open
 # (its `_tunnel` never closes the response). That is the standard library's
@@ -165,6 +166,43 @@ def test_release_without_sha256sums_needs_explicit_opt_in(release_server, monkey
     assert "UNVERIFIED" in capsys.readouterr().err
 
 
+def test_override_wins_over_a_bundled_engine(release_server, monkeypatch, tmp_path):
+    bundled = tmp_path / engine.binary_name()
+    bundled.write_bytes(b"bundled")
+    monkeypatch.setattr(engine, "bundled_binary", lambda: bundled)
+    asset = engine.asset_name()
+    data = make_archive(asset, b"override")
+    release_server.files[f"v9.9.9/{asset}"] = data
+    release_server.files["v9.9.9/SHA256SUMS"] = f"{sha256(data)}  {asset}\n".encode()
+    monkeypatch.setenv(engine.ENV_ENGINE_VERSION, "9.9.9")
+    info = engine.locate_engine()
+    assert info.source == engine.SOURCE_OVERRIDE
+    assert info.path.read_bytes() == b"override"
+
+
+def test_bundled_engine_comes_first(isolated, monkeypatch, tmp_path):
+    pkg = tmp_path / "pkg"
+    (pkg / "_engine").mkdir(parents=True)
+    exe = pkg / "_engine" / engine.binary_name()
+    exe.write_bytes(b"bundled")
+    monkeypatch.setattr(engine, "bundled_binary", REAL_BUNDLED_BINARY)
+    monkeypatch.setattr(engine, "__file__", str(pkg / "engine.py"))
+    monkeypatch.setenv(engine.ENV_OFFLINE, "1")
+    info = engine.locate_engine()
+    assert (info.path, info.source, info.version) == (exe.resolve(), "bundled", binary.BUNDLED_VERSION)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_bundled_engine_gets_its_executable_bit_back(monkeypatch, tmp_path):
+    exe = tmp_path / "_engine" / "pypilot"
+    exe.parent.mkdir()
+    exe.write_bytes(b"#!/bin/sh\n")
+    exe.chmod(0o644)
+    monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
+    assert engine.bundled_binary() == exe.resolve()
+    assert exe.stat().st_mode & 0o111
+
+
 def test_offline_never_downloads(isolated, monkeypatch):
     def no_download(*args, **kwargs):
         raise AssertionError("downloaded while offline")
@@ -176,6 +214,14 @@ def test_offline_never_downloads(isolated, monkeypatch):
     monkeypatch.setenv(engine.ENV_ENGINE_VERSION, "v9.9.9")
     with pytest.raises(EngineNotFoundError, match="PYPILOT_OFFLINE is set"):
         engine.locate_engine()
+
+
+def test_offline_still_uses_a_local_engine(isolated, monkeypatch, tmp_path):
+    exe = tmp_path / engine.binary_name()
+    exe.write_bytes(b"x")
+    monkeypatch.setattr(engine, "bundled_binary", lambda: exe)
+    monkeypatch.setenv(engine.ENV_OFFLINE, "1")
+    assert engine.ensure_binary() == exe
 
 
 def test_probing_never_searches_path(isolated, monkeypatch, tmp_path):
