@@ -200,7 +200,7 @@ Next: pypilot migrate-to-pixi --write
 
 Guides: [pixi and PyPilot](https://pypilot-dev.github.io/pypilot/pixi/), [the advisory](https://pypilot-dev.github.io/pypilot/pixi/advisory), [migrating to pixi](https://pypilot-dev.github.io/pypilot/pixi/migrate).
 
-> Engine 1.2.2, the one `pypilot-cli` 1.2.2 runs, already detects pixi projects and works through `pixi install` and `pixi add --pypi`. The environment choice, doctor's pixi checks, the advisory, `migrate-to-pixi`, `migrate-conda --to pixi`, `install-pixi` and `package_manager = "pixi"` need a newer engine: coming in the next release.
+> The environment choice, doctor's pixi checks, the advisory, `migrate-to-pixi`, `migrate-conda --to pixi`, `install-pixi` and `package_manager = "pixi"` are new since 1.3.0 and need engine 1.3.0 or newer, which `pypilot-cli` 1.3.0 bundles. `pypilot-cli` 1.2.2 (engine 1.2.2) only detects pixi projects and works through `pixi install` and `pixi add --pypi`.
 
 ---
 
