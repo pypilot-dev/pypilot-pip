@@ -8,7 +8,7 @@ import subprocess
 import sys
 from typing import List, Optional
 
-from .binary import ensure_binary, get_cache_dir
+from .engine import ensure_binary, get_cache_dir
 
 __version__ = "1.2.2"
 

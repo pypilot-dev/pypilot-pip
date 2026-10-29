@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from .binary import ensure_binary
+from .engine import ensure_binary
 
 
 def main() -> None:
