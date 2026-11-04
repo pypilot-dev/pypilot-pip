@@ -62,12 +62,14 @@ There is no musl (Alpine) build of the engine. On Linux with an older glibc, bui
 PyPilot provides a complete suite of environment doctor and bootstrap tools:
 
 ### 1. `pypilot doctor`
-Analyzes your current workspace, virtual environment, and dependency manifests (`requirements.txt`, `pyproject.toml`, `environment.yml`). Displays a read-only health check without modifying any files.
+Analyzes your current workspace, virtual environment, and dependency manifests (`requirements.txt`, `pyproject.toml`, `environment.yml`). Displays a read-only health check without modifying any files (unless you pass `--fix`).
 ```bash
 pypilot doctor
 # Target a specific workspace folder:
 pypilot doctor --path /path/to/project
 ```
+
+Add `--fix` to fix what the report flags (`pypilot doctor --fix`). It applies only the fixes the findings call for, such as `uv sync --locked`, `uv lock`, reinstalling one half-installed package, repairing the venv on its own Python, raising `requires-python` or editing one requirement. A healthy project is left alone, the Python moves only when a dependency forces it, and every edited file is named. It also handles known breakages and dependency conflicts, and never edits your source code. `--dry-run` shows the plan first. `pypilot fix requirements` fixes mistakes in `requirements.txt` and adds undeclared imports. See [What doctor --fix fixes](https://pypilot-dev.github.io/pypilot/guide/fixing).
 
 ### 2. `pypilot setup`
 Bootstraps a deterministic virtual environment. Automatically detects existing system tools:
