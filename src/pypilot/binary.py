@@ -17,15 +17,15 @@ from typing import TYPE_CHECKING, Any, Dict, Tuple
 GITHUB_REPO = "pypilot-dev/pypilot"
 
 # The engine release this package is pinned to.
-DEFAULT_TAG = "v1.3.0"
+DEFAULT_TAG = "v1.4.0"
 
 # SHA-256 of every release asset of DEFAULT_TAG. A download is checked against
 # this before it is extracted or run.
 ENGINE_SHA256: Dict[str, str] = {
-    "pypilot-darwin-arm64.tar.gz": "7e8c76180d704b3f887a078e8225ee9c9b26720607234afe4cdaab637a8b8ba7",
-    "pypilot-darwin-x64.tar.gz": "0ea5d56780500ba19edb94c992629bed5304d4bc53084434e98ed4747d6a4432",
-    "pypilot-linux-x64.tar.gz": "9b225dd1015ce32f329413e455f593b6090eb0e6f6a2d85ef8edd597bf1afe32",
-    "pypilot-windows-x64.zip": "aab0efddd8abf984696055a8608624c68309909e8aaddd21784a8dc4f3db5a58",
+    "pypilot-darwin-arm64.tar.gz": "af36f0f30dd99ca0c1edaffa1f232e8227f129ff367aa2ccb385cb79a230f206",
+    "pypilot-darwin-x64.tar.gz": "20ee556805efdcea2fe0a57dc717f2892eba6701f2e63198342ef3bf84048d8a",
+    "pypilot-linux-x64.tar.gz": "1ea4ab9ab20e5177fee62b934ebdd052386804c346fc7157dec35f7729da036e",
+    "pypilot-windows-x64.zip": "41ca6f506c7ddc408407c1d49e80c054e533812a685971994394822148be507d",
 }
 
 # Oldest helper accepted from ~/.cargo/bin or PATH.
