@@ -4,7 +4,7 @@ PyPilot: deterministic Python environment doctor and dependency manager.
 
 from __future__ import annotations
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 from .api import RunResult, arun, run  # noqa: E402
 from .engine import (  # noqa: E402
