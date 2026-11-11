@@ -241,6 +241,10 @@ PyPilot respects workspace settings in `.pypilot.toml` or your editor configurat
 
 Each GitHub release of `pypilot-cli` also carries a CycloneDX SBOM (`pypilot-cli.cdx.json`) that lists the bundled engine archives with their hashes.
 
+### Windows: Smart App Control
+
+On Windows 11 with Smart App Control on, Windows can block the engine (`pypilot.exe`), and `pypilot` fails with `An Application Control policy has blocked this file. (os error 4551)`. The engine is not code signed yet, and Smart App Control has no per-app exception, so the fix is to turn it off: **Windows Security > App & browser control > Smart App Control settings > Off**. Defender and SmartScreen keep running, and current Windows 11 builds let you turn it back on later from the same page. Details in [Troubleshooting](https://pypilot-dev.github.io/pypilot/guide/troubleshooting#smart-app-control).
+
 ---
 
 ## 💙 Support the project
